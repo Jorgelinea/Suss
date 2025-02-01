@@ -56,11 +56,25 @@
         <p>Platform to write and share texts.</p>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
     <script>
+        // Your Firebase config
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            databaseURL: "YOUR_DATABASE_URL",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
         document.addEventListener("DOMContentLoaded", () => {
-            if (!localStorage.getItem("usuarios")) {
-                localStorage.setItem("usuarios", JSON.stringify([{ usuario: "Capybara", password: "admin", fecha: new Date(), rol: "admin" }]));
-            }
             verificarSesion();
             cargarPublicaciones();
         });
@@ -95,27 +109,32 @@
             if (password.length <= 5) return alert("Password must be longer than 5 characters.");
             if (!/\d/.test(password)) return alert("Password must contain at least one number.");
 
-            let usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
-            if (usuarios.find(u => u.usuario === usuario)) return alert("Username already exists");
+            let usuariosRef = database.ref("usuarios");
+            usuariosRef.once("value", (snapshot) => {
+                let usuarios = snapshot.val() || [];
+                if (usuarios.find(u => u.usuario === usuario)) return alert("Username already exists");
 
-            let rol = usuario === "Capybara" ? "admin" : "normal";
-            let nuevoUsuario = { usuario, password, fecha: new Date(), rol };
-            usuarios.push(nuevoUsuario);
-            localStorage.setItem("usuarios", JSON.stringify(usuarios));
-            localStorage.setItem("usuarioActivo", JSON.stringify(nuevoUsuario));
-            alert("Successfully registered");
-            verificarSesion();
+                let nuevoUsuario = { usuario, password, fecha: new Date(), rol: "normal" };
+                usuariosRef.push(nuevoUsuario);
+                localStorage.setItem("usuarioActivo", JSON.stringify(nuevoUsuario));
+                alert("Successfully registered");
+                verificarSesion();
+            });
         }
 
         function login() {
             let usuario = document.getElementById("username").value.trim();
             let password = document.getElementById("password").value.trim();
-            let usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
-            let user = usuarios.find(u => u.usuario === usuario && u.password === password);
-            if (!user) return alert("Invalid credentials");
-            localStorage.setItem("usuarioActivo", JSON.stringify(user));
-            alert("Logged in");
-            verificarSesion();
+
+            let usuariosRef = database.ref("usuarios");
+            usuariosRef.once("value", (snapshot) => {
+                let usuarios = snapshot.val() || [];
+                let user = usuarios.find(u => u.usuario === usuario && u.password === password);
+                if (!user) return alert("Invalid credentials");
+                localStorage.setItem("usuarioActivo", JSON.stringify(user));
+                alert("Logged in");
+                verificarSesion();
+            });
         }
 
         function logout() {
@@ -144,65 +163,30 @@
             let contenido = document.getElementById("contenido").value.trim();
             if (!titulo || !descripcion || !contenido) return alert("All fields are required");
 
-            let publicaciones = JSON.parse(localStorage.getItem("publicaciones")) || [];
-            publicaciones.push({ titulo, descripcion, contenido, usuario: user.usuario });
-            localStorage.setItem("publicaciones", JSON.stringify(publicaciones));
-
+            let publicacionesRef = database.ref("publicaciones");
+            publicacionesRef.push({ titulo, descripcion, contenido, usuario: user.usuario });
             cargarPublicaciones();
         }
 
         function cargarPublicaciones() {
-            let publicaciones = JSON.parse(localStorage.getItem("publicaciones")) || [];
-            let user = JSON.parse(localStorage.getItem("usuarioActivo"));
-            let publicacionesDiv = document.getElementById("publicaciones");
-            publicacionesDiv.innerHTML = "";
+            let publicacionesRef = database.ref("publicaciones");
+            publicacionesRef.once("value", (snapshot) => {
+                let publicaciones = snapshot.val() || [];
+                let publicacionesDiv = document.getElementById("publicaciones");
+                publicacionesDiv.innerHTML = "";
 
-            publicaciones.forEach((post, index) => {
-                let postDiv = document.createElement("div");
-                postDiv.classList.add("post");
-                postDiv.innerHTML = `
-                    <b>${post.titulo}</b> <br>
-                    <span class="description">${post.descripcion}</span> <br>
-                    <span class="content">${post.contenido}</span> <br>
-                    <i>Posted by: <a href="#" onclick="verPerfil('${post.usuario}')">${post.usuario}</a></i> <br>
-                    <button onclick="copyToClipboard('${post.contenido}')">Copy</button>
-                `;
-
-                if (user?.rol === "admin") {
-                    let deleteBtn = document.createElement("button");
-                    deleteBtn.textContent = "Delete";
-                    deleteBtn.style.background = "red";
-                    deleteBtn.onclick = () => deletePost(index);
-                    postDiv.appendChild(deleteBtn);
-                }
-
-                publicacionesDiv.appendChild(postDiv);
+                Object.values(publicaciones).forEach((post, index) => {
+                    let postDiv = document.createElement("div");
+                    postDiv.classList.add("post");
+                    postDiv.innerHTML = `
+                        <b>${post.titulo}</b> <br>
+                        <span class="description">${post.descripcion}</span> <br>
+                        <span class="content">${post.contenido}</span> <br>
+                        <i>Posted by: ${post.usuario}</i> <br>
+                    `;
+                    publicacionesDiv.appendChild(postDiv);
+                });
             });
-        }
-
-        function deletePost(index) {
-            let publicaciones = JSON.parse(localStorage.getItem("publicaciones")) || [];
-            publicaciones.splice(index, 1);
-            localStorage.setItem("publicaciones", JSON.stringify(publicaciones));
-            cargarPublicaciones();
-        }
-
-        function verPerfil(usuario) {
-            let usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
-            let user = usuarios.find(u => u.usuario === usuario);
-            if (!user) return alert("User not found");
-
-            document.getElementById("perfilInfo").innerHTML = `
-                <b>Username:</b> ${user.usuario} <br>
-                <b>Creation date:</b> ${new Date(user.fecha).toLocaleDateString()} <br>
-                <b>Role:</b> ${user.rol.charAt(0).toUpperCase() + user.rol.slice(1)}
-            `;
-            showTab("perfil");
-        }
-
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text);
-            alert("Text copied");
         }
     </script>
 
