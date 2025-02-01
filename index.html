@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Publishing Platform</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #121212; color: white; text-align: center; }
+        .tabs { display: none; }
+        .tabs button { background: #333; color: white; padding: 10px; border: none; cursor: pointer; }
+        .tabs button:hover { background: #555; }
+        .tab-content { display: none; padding: 20px; }
+        .active { display: block; }
+        input, textarea { width: 90%; padding: 10px; margin: 5px; background: #222; color: white; border: 1px solid #444; }
+        button { padding: 10px; background: #28a745; color: white; border: none; cursor: pointer; }
+        button:hover { background: #218838; }
+        .post { border-bottom: 1px solid #444; padding: 10px; margin: 10px; }
+        .description { color: gray; }
+        .content { color: lightgreen; }
+    </style>
+</head>
+<body>
+
+    <div class="tabs">
+        <button onclick="showTab('publicar')">Publish</button>
+        <button onclick="showTab('perfil')">Profile</button>
+        <button onclick="showTab('info')">Info</button>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <div id="login" class="tab-content active">
+        <h2>Login / Register</h2>
+        <input type="text" id="username" placeholder="Username (more than 4 characters)">
+        <input type="password" id="password" placeholder="Password (more than 5 characters)">
+        <button onclick="login()">Login</button>
+        <button onclick="register()">Register</button>
+    </div>
+
+    <div id="publicar" class="tab-content">
+        <h2>Post Text</h2>
+        <input type="text" id="titulo" placeholder="Title">
+        <input type="text" id="descripcion" placeholder="Description">
+        <textarea id="contenido" placeholder="Content"></textarea>
+        <button onclick="publicarTexto()">Publish</button>
+        <h3>Posts:</h3>
+        <div id="publicaciones"></div>
+    </div>
+
+    <div id="perfil" class="tab-content">
+        <h2>Profile</h2>
+        <p id="perfilInfo"></p>
+    </div>
+
+    <div id="info" class="tab-content">
+        <h2>How it works?</h2>
+        <p>Platform to write and share texts.</p>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            if (!localStorage.getItem("usuarios")) {
+                localStorage.setItem("usuarios", JSON.stringify([{ usuario: "Capybara", password: "admin", fecha: new Date(), rol: "admin" }]));
+            }
+            verificarSesion();
+            cargarPublicaciones();
+        });
+
+        function verificarSesion() {
+            let usuarioActivo = JSON.parse(localStorage.getItem("usuarioActivo"));
+            let tabs = document.querySelector(".tabs");
+            if (usuarioActivo) {
+                tabs.style.display = "block"; 
+                showTab("publicar");
+            } else {
+                tabs.style.display = "none";
+                showTab("login");
+            }
+        }
+
+        function showTab(tab) {
+            document.querySelectorAll(".tab-content").forEach(e => e.classList.remove("active"));
+            document.getElementById(tab).classList.add("active");
+
+            if (tab === "perfil") {
+                mostrarPerfilUsuarioActivo();
+            }
+        }
+
+        function register() {
+            let usuario = document.getElementById("username").value.trim();
+            let password = document.getElementById("password").value.trim();
+
+            if (!usuario || !password) return alert("Please fill all fields");
+            if (usuario.length <= 4) return alert("Username must be longer than 4 characters.");
+            if (password.length <= 5) return alert("Password must be longer than 5 characters.");
+            if (!/\d/.test(password)) return alert("Password must contain at least one number.");
+
+            let usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
+            if (usuarios.find(u => u.usuario === usuario)) return alert("Username already exists");
+
+            let rol = usuario === "Capybara" ? "admin" : "normal";
+            let nuevoUsuario = { usuario, password, fecha: new Date(), rol };
+            usuarios.push(nuevoUsuario);
+            localStorage.setItem("usuarios", JSON.stringify(usuarios));
+            localStorage.setItem("usuarioActivo", JSON.stringify(nuevoUsuario));
+            alert("Successfully registered");
+            verificarSesion();
+        }
+
+        function login() {
+            let usuario = document.getElementById("username").value.trim();
+            let password = document.getElementById("password").value.trim();
+            let usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
+            let user = usuarios.find(u => u.usuario === usuario && u.password === password);
+            if (!user) return alert("Invalid credentials");
+            localStorage.setItem("usuarioActivo", JSON.stringify(user));
+            alert("Logged in");
+            verificarSesion();
+        }
+
+        function logout() {
+            localStorage.removeItem("usuarioActivo");
+            alert("Logged out");
+            verificarSesion();
+        }
+
+        function mostrarPerfilUsuarioActivo() {
+            let usuarioActivo = JSON.parse(localStorage.getItem("usuarioActivo"));
+            if (!usuarioActivo) return;
+            let perfilInfo = document.getElementById("perfilInfo");
+            perfilInfo.innerHTML = `
+                <b>Username:</b> ${usuarioActivo.usuario} <br>
+                <b>Creation date:</b> ${new Date(usuarioActivo.fecha).toLocaleDateString()} <br>
+                <b>Role:</b> ${usuarioActivo.rol.charAt(0).toUpperCase() + usuarioActivo.rol.slice(1)}
+            `;
+        }
+
+        function publicarTexto() {
+            let user = JSON.parse(localStorage.getItem("usuarioActivo"));
+            if (!user) return alert("Log in to post");
+
+            let titulo = document.getElementById("titulo").value.trim();
+            let descripcion = document.getElementById("descripcion").value.trim();
+            let contenido = document.getElementById("contenido").value.trim();
+            if (!titulo || !descripcion || !contenido) return alert("All fields are required");
+
+            let publicaciones = JSON.parse(localStorage.getItem("publicaciones")) || [];
+            publicaciones.push({ titulo, descripcion, contenido, usuario: user.usuario });
+            localStorage.setItem("publicaciones", JSON.stringify(publicaciones));
+
+            cargarPublicaciones();
+        }
+
+        function cargarPublicaciones() {
+            let publicaciones = JSON.parse(localStorage.getItem("publicaciones")) || [];
+            let user = JSON.parse(localStorage.getItem("usuarioActivo"));
+            let publicacionesDiv = document.getElementById("publicaciones");
+            publicacionesDiv.innerHTML = "";
+
+            publicaciones.forEach((post, index) => {
+                let postDiv = document.createElement("div");
+                postDiv.classList.add("post");
+                postDiv.innerHTML = `
+                    <b>${post.titulo}</b> <br>
+                    <span class="description">${post.descripcion}</span> <br>
+                    <span class="content">${post.contenido}</span> <br>
+                    <i>Posted by: <a href="#" onclick="verPerfil('${post.usuario}')">${post.usuario}</a></i> <br>
+                    <button onclick="copyToClipboard('${post.contenido}')">Copy</button>
+                `;
+
+                if (user?.rol === "admin") {
+                    let deleteBtn = document.createElement("button");
+                    deleteBtn.textContent = "Delete";
+                    deleteBtn.style.background = "red";
+                    deleteBtn.onclick = () => deletePost(index);
+                    postDiv.appendChild(deleteBtn);
+                }
+
+                publicacionesDiv.appendChild(postDiv);
+            });
+        }
+
+        function deletePost(index) {
+            let publicaciones = JSON.parse(localStorage.getItem("publicaciones")) || [];
+            publicaciones.splice(index, 1);
+            localStorage.setItem("publicaciones", JSON.stringify(publicaciones));
+            cargarPublicaciones();
+        }
+
+        function verPerfil(usuario) {
+            let usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
+            let user = usuarios.find(u => u.usuario === usuario);
+            if (!user) return alert("User not found");
+
+            document.getElementById("perfilInfo").innerHTML = `
+                <b>Username:</b> ${user.usuario} <br>
+                <b>Creation date:</b> ${new Date(user.fecha).toLocaleDateString()} <br>
+                <b>Role:</b> ${user.rol.charAt(0).toUpperCase() + user.rol.slice(1)}
+            `;
+            showTab("perfil");
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text);
+            alert("Text copied");
+        }
+    </script>
+
+</body>
+</html>
